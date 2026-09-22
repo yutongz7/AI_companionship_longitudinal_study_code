@@ -1,0 +1,277 @@
+---
+title: "Analysis code of 'Sustained AI companionship and lower well-being via lower human interaction'"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r libraries}
+library(readr)
+library(sampleSelection)
+library(lavaan)
+
+d <- read_csv("./data.csv")
+nrow(d)
+```
+
+
+```{r}
+set.seed(42)
+selection_probit <- glm(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  family = binomial("probit"), data = d
+)
+summary(selection_probit)
+
+linear_predictor <- predict(selection_probit, type = "link")
+d$imr <- ifelse(
+  d$completed_t2_flag == 1,
+  dnorm(linear_predictor) / pnorm(linear_predictor),
+  dnorm(linear_predictor) / (pnorm(linear_predictor) - 1)
+)
+
+d_completers <- subset(d, completed_t2_flag == 1)
+c(N_full = nrow(d), N_observed = sum(d$completed_t2_flag == 1), N_censored = sum(d$completed_t2_flag == 0))
+```
+
+
+```{r}
+m1 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  intensity_avg_t2_z ~ intensity_avg_t1_z + chatbot_use_social_primary_flag_t1 + self_disclosure_select_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m1)
+```
+
+
+```{r}
+m2 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  companionship_use_t2_z ~ chatbot_use_social_primary_flag_t1 + intensity_avg_t1_z + self_disclosure_select_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m2)
+```
+
+
+```{r}
+m3 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  self_disclosure_select_avg_t2_z ~ self_disclosure_select_avg_t1_z + chatbot_use_social_primary_flag_t1 + intensity_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m3)
+```
+
+
+```{r}
+m4 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  intensity_avg_t2_z ~ intensity_avg_t1_z + relational_t1_z + self_disclosure_select_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m4)
+```
+
+
+```{r}
+m5 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  relational_t2_z ~ relational_t1_z + intensity_avg_t1_z + self_disclosure_select_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m5)
+```
+
+
+```{r}
+m6 <- selection(
+  completed_t2_flag ~ well_being_avg_t1_z + companionship_use_t1_z + intensity_avg_t1_z +
+    self_disclosure_select_avg_t1_z + anthropomorphism_score_t1_z +
+    total_approvals_t1_log_z + tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  self_disclosure_select_avg_t2_z ~ self_disclosure_select_avg_t1_z + relational_t1_z + intensity_avg_t1_z +
+    tenure_score_t1_z + age_z + male + non_binary + single_t1,
+  data = d, method = "ml"
+)
+summary(m6)
+```
+
+
+```{r}
+set.seed(42)
+fit_pers_int <- sem('
+  intensity_avg_t2_z ~ a1*intensity_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + b1*intensity_avg_t2_z + c*intensity_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  indirect := a1*b1
+  total := c + a1*b1
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_pers_int, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_pers_int)
+col_a1 <- pt$free[pt$label == "a1" & pt$free > 0][1]
+col_b1 <- pt$free[pt$label == "b1" & pt$free > 0][1]
+ind_draws <- fit_pers_int@boot$coef[, col_a1] * fit_pers_int@boot$coef[, col_b1]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_pers_comp_sr <- sem('
+  companionship_use_t2_z ~ a1*companionship_use_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + b1*companionship_use_t2_z + c*companionship_use_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  indirect := a1*b1
+  total := c + a1*b1
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_pers_comp_sr, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_pers_comp_sr)
+col_a1 <- pt$free[pt$label == "a1" & pt$free > 0][1]
+col_b1 <- pt$free[pt$label == "b1" & pt$free > 0][1]
+ind_draws <- fit_pers_comp_sr@boot$coef[, col_a1] * fit_pers_comp_sr@boot$coef[, col_b1]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_pers_comp_ft <- sem('
+  relational_t2_z ~ a1*relational_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + b1*relational_t2_z + c*relational_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  indirect := a1*b1
+  total := c + a1*b1
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_pers_comp_ft, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_pers_comp_ft)
+col_a1 <- pt$free[pt$label == "a1" & pt$free > 0][1]
+col_b1 <- pt$free[pt$label == "b1" & pt$free > 0][1]
+ind_draws <- fit_pers_comp_ft@boot$coef[, col_a1] * fit_pers_comp_ft@boot$coef[, col_b1]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_pers_sd <- sem('
+  self_disclosure_select_avg_t2_z ~ a1*self_disclosure_select_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + b1*self_disclosure_select_avg_t2_z + c*self_disclosure_select_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  indirect := a1*b1
+  total := c + a1*b1
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_pers_sd, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_pers_sd)
+col_a1 <- pt$free[pt$label == "a1" & pt$free > 0][1]
+col_b1 <- pt$free[pt$label == "b1" & pt$free > 0][1]
+ind_draws <- fit_pers_sd@boot$coef[, col_a1] * fit_pers_sd@boot$coef[, col_b1]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_disp_int <- sem('
+  intensity_avg_t2_z ~ a1*intensity_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  time_inperson_z ~ d*intensity_avg_t2_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + cp*intensity_avg_t2_z + b*time_inperson_z + c*intensity_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  ind_via_M := d*b
+  total_X2 := cp + d*b
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_disp_int, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_disp_int)
+col_d <- pt$free[pt$label == "d" & pt$free > 0][1]
+col_b <- pt$free[pt$label == "b" & pt$free > 0][1]
+ind_draws <- fit_disp_int@boot$coef[, col_d] * fit_disp_int@boot$coef[, col_b]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect via human interaction: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_disp_comp_ft <- sem('
+  relational_t2_z ~ a1*relational_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  time_inperson_z ~ d*relational_t2_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + cp*relational_t2_z + b*time_inperson_z + c*relational_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  ind_via_M := d*b
+  total_X2 := cp + d*b
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_disp_comp_ft, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_disp_comp_ft)
+col_d <- pt$free[pt$label == "d" & pt$free > 0][1]
+col_b <- pt$free[pt$label == "b" & pt$free > 0][1]
+ind_draws <- fit_disp_comp_ft@boot$coef[, col_d] * fit_disp_comp_ft@boot$coef[, col_b]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect via human interaction: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
+
+
+```{r}
+set.seed(42)
+fit_disp_sd <- sem('
+  self_disclosure_select_avg_t2_z ~ a1*self_disclosure_select_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  time_inperson_z ~ d*self_disclosure_select_avg_t2_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  well_being_avg_t2_z ~ ar*well_being_avg_t1_z + cp*self_disclosure_select_avg_t2_z + b*time_inperson_z + c*self_disclosure_select_avg_t1_z + tenure_score_t1_z + age_z + male + non_binary + single_t1 + imr
+  ind_via_M := d*b
+  total_X2 := cp + d*b
+', data = d_completers, estimator = "ML", se = "bootstrap", bootstrap = 5000, missing = "fiml", fixed.x = FALSE)
+
+summary(fit_disp_sd, standardized = TRUE, ci = TRUE)
+
+pt <- parTable(fit_disp_sd)
+col_d <- pt$free[pt$label == "d" & pt$free > 0][1]
+col_b <- pt$free[pt$label == "b" & pt$free > 0][1]
+ind_draws <- fit_disp_sd@boot$coef[, col_d] * fit_disp_sd@boot$coef[, col_b]
+ind_draws <- ind_draws[is.finite(ind_draws)]
+ind_ci <- quantile(ind_draws, c(.025, .975))
+ind_p  <- min(2 * min(mean(ind_draws < 0), mean(ind_draws > 0)), 1)
+cat(sprintf("Indirect via human interaction: CI = [%.3f, %.3f], p = %.3f\n", ind_ci[1], ind_ci[2], ind_p))
+```
